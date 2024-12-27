@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright Song Meo <songmeo@pm.me>
 
+from asyncio import Lock, sleep
 import psycopg2
 import os
 from dotenv import load_dotenv
@@ -152,7 +153,28 @@ def main() -> None:
     )
     con.commit()
 
+    user_locks = {}
+
+    async def get_user_lock(chat_id, user_id):
+        key = (chat_id, user_id)
+        if key not in user_locks:
+            user_locks[key] = Lock()
+        return user_locks[key]
+
     async def echo_proxy(update, context):
+        chat_id = update.message.chat_id
+        user_id = update.message.from_user.id
+        message = update.message.text  # todo: currently this doesn't cumulate messages
+
+        lock = await get_user_lock(chat_id, user_id)
+        async with lock:
+            logger.info(
+                f"Lock acquired for chat {chat_id}, user {user_id}. Waiting for 5 seconds..."
+            )
+            await sleep(5)  # Wait for user to finish sending messages
+            await echo(update, context, con)  # Process user's messages
+            logger.info(f"Lock released for chat {chat_id}, user {user_id}.")
+
         await echo(update, context, con)
 
     # on non command i.e. message - echo the message on Telegram
