@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright Song Meo <songmeo@pm.me>
 
-from asyncio import Lock, sleep
+from asyncio import Lock, sleep, Queue
 import psycopg2
 import os
 from dotenv import load_dotenv
@@ -161,21 +161,41 @@ def main() -> None:
             user_locks[key] = Lock()
         return user_locks[key]
 
+    user_message_queues = {}
+
     async def echo_proxy(update, context):
         chat_id = update.message.chat_id
         user_id = update.message.from_user.id
         message = update.message.text  # todo: currently this doesn't cumulate messages
 
+        if (chat_id, user_id) not in user_message_queues:
+            user_message_queues[(chat_id, user_id)] = Queue()
+
+        queue = user_message_queues[(chat_id, user_id)]
+        # Add the current message to the queue
+        await queue.put(message)
+
+        # Lock to ensure only one handler processes messages for a user at a time
         lock = await get_user_lock(chat_id, user_id)
         async with lock:
+            messages = []
             logger.info(
                 f"Lock acquired for chat {chat_id}, user {user_id}. Waiting for 5 seconds..."
             )
-            await sleep(5)  # Wait for user to finish sending messages
-            await echo(update, context, con)  # Process user's messages
+            timeout = 5
+            while timeout > 0:
+                try:
+                    # Attempt to get a message from the queue with a 1-second timeout
+                    new_message = await queue.get(timeout=1)
+                    messages.append(new_message)
+                    logger.info(f"Appended message: {new_message}")
+                except Exception:
+                    # If no message is received within 1 second, reduce timeout
+                    pass
+                timeout -= 1
+            messages += message
+            await echo(update, context, con, messages)  # Process user's messages
             logger.info(f"Lock released for chat {chat_id}, user {user_id}.")
-
-        await echo(update, context, con)
 
     # on non command i.e. message - echo the message on Telegram
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, echo_proxy))
