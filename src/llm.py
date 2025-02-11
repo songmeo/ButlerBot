@@ -10,7 +10,7 @@ from logger import logger
 # todo: make this a class
 
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-OPENAI_MODEL = "gpt-4-turbo"
+OPENAI_MODEL = "gpt-4o"
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 

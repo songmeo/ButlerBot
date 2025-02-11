@@ -14,7 +14,7 @@ from telegram.ext import (
     filters,
     CallbackContext,
 )
-from handler import text_handler, photo_handler
+from handler import photo_handler, store_message, generate_response
 from logger import logger
 
 load_dotenv()
@@ -91,8 +91,19 @@ def main() -> None:
         else:
             logger.error(f"Update {update} caused error {context.error}", exc_info=context.error)
 
+    delaying = asyncio.Lock()
+
+    async def delay_then_response(update, con):
+        async with delaying:
+            await asyncio.sleep(3)  # Wait 3 seconds for new messages
+            await generate_response(update, con)
+
     async def text_handler_proxy(update, context):
-        await text_handler(update, context, con)
+        _ = context
+        await store_message(update, con)
+
+        if not delaying.locked():
+            _ = asyncio.create_task(delay_then_response(update, con))  # run the delay in background
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler_proxy))
 

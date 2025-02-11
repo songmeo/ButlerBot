@@ -26,8 +26,7 @@ SYSTEM_PROMPT = f"""
     """
 
 
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, con: psycopg2.connect) -> None:
-    _ = context
+async def store_message(update: Update, con: psycopg2.connect) -> None:
     logger.info(
         "Mew message from chat %s, user %s",
         update.message.chat_id,
@@ -56,6 +55,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, con: 
         (chat_id, user_id, text),
     )
     con.commit()
+
+
+async def generate_response(update: Update, con: psycopg2.connect):
+    cur = con.cursor()
+    chat_id = update.message.chat_id
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     cur.execute(
         """
